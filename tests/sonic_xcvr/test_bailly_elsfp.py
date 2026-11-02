@@ -174,17 +174,12 @@ class TestBaillyElsfpApi:
         assert api.get_module_state() == state
         assert api.get_elsfp_status()["module_state"] == state
 
-    def test_lane_enable_and_state(self, api, eeprom):
-        eeprom.put(CONTROL_PAGE, 133, "B", 0b00000101)   # lasers 0 and 2 disabled
-        eeprom.put(CONTROL_PAGE, 135, "B", 0b11111010)   # lasers 0 and 2 inactive
-        assert api.get_per_lane_enable() == [0, 1, 0, 1, 1, 1, 1, 1]
-        state = api.get_per_lane_state()
-        assert state["LaneState1"] == "Inactive"
-        assert state["LaneState2"] == "Active"
-        status = api.get_elsfp_status()
-        assert status["enable_lane1"] is False
-        assert status["enable_lane2"] is True
-        assert status["state_lane3"] == "Inactive"
+    def test_unavailable_lane_queries_are_not_exposed(self, api):
+        # The public framework supports these methods; legacy Bailly does not.
+        assert not hasattr(api, "get_per_lane_state")
+        assert not hasattr(api, "get_per_lane_enable")
+        with patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Unsupported EEPROM read")):
+            assert api.get_banked_elsfp_status() == {}
 
     def test_read_failures(self, api, eeprom):
         eeprom.fail_reads = True
@@ -358,14 +353,14 @@ class TestBaillyElsfpLegacyAdapters:
         assert eeprom.writes == []
         legacy.assert_called_once_with()
 
-    def test_legacy_module_status_does_not_replace_laser_status(self, api, eeprom):
-        eeprom.put(CONTROL_PAGE, 133, "B", 0x01)
-        eeprom.put(CONTROL_PAGE, 135, "B", 0x02)
+    def test_status_reports_only_legacy_module_values(self, api):
+        # No per-laser register reads or fabricated lane fields belong here.
         with patch.object(api, "get_rlm_status", return_value={
-                "els_module_low_power_state": "Unused", "els_interrupt_status": "Unused"}):
-            assert api.get_per_lane_enable()[:2] == [0, 1]
-            assert api.get_per_lane_state()["LaneState1"] == "Inactive"
-            assert api.get_per_lane_state()["LaneState2"] == "Active"
+                "els_module_low_power_state": "High power mode", "els_interrupt_status": "Interrupt event cleared"}):
+            with patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Extra EEPROM read")):
+                assert api.get_elsfp_status() == {
+                    "module_state": "ModuleReady", "interrupt_status": "Interrupt event cleared",
+                }
 
 
 class TestBaillyElsfpThresholdAdapters:

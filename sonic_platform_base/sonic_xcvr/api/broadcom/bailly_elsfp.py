@@ -434,51 +434,10 @@ class BaillyElsfpApi(XcvrApi):
         flags["interrupt_status"] = status.get("els_interrupt_status")
         return flags
 
-    # Existing per-laser state/enable readers and unsupported controls.
-
-    def _read_laser_bits(self, low_field, high_field):
-        """Return a 16-bit per-laser register value, bit N for laser N."""
-        low = self.xcvr_eeprom.read(low_field)
-        high = self.xcvr_eeprom.read(high_field)
-        if low is None or high is None:
-            return None
-        return (high << 8) | low
-
-    def get_per_lane_enable(self) -> list:
-        count = self.get_lane_count()
-        disabled = self._read_laser_bits(bailly.LASER_DISABLE_CONTROL_7_0,
-                                         bailly.LASER_DISABLE_CONTROL_15_8)
-        if count is None or disabled is None:
-            return None
-        return [0 if (disabled >> laser) & 1 else 1 for laser in range(count)]
-
-    def get_per_lane_state(self) -> dict:
-        count = self.get_lane_count()
-        active = self._read_laser_bits(bailly.LASER_ACTIVE_STATUS_7_0,
-                                       bailly.LASER_ACTIVE_STATUS_15_8)
-        if count is None or active is None:
-            return None
-        codes = self.xcvr_eeprom.mem_map.codes
-        return {
-            "%s%d" % (elsfp_consts.LANE_STATE_FIELD, laser + 1):
-                codes.LASER_ACTIVE_STATUS[(active >> laser) & 1]
-            for laser in range(count)
-        }
-
     def get_banked_elsfp_status(self) -> dict:
-        lane_enable = self.get_per_lane_enable()
-        lane_state = self.get_per_lane_state()
-        if lane_enable is None or lane_state is None:
-            return None
-
-        status = {}
-        first_lane = self._get_first_lane_for_bank()
-        for index, enabled in enumerate(lane_enable):
-            status["enable_lane%d" % (first_lane + index)] = bool(enabled)
-        for index in range(len(lane_state)):
-            status["state_lane%d" % (first_lane + index)] = \
-                lane_state["%s%d" % (elsfp_consts.LANE_STATE_FIELD, index + 1)]
-        return status
+        # Legacy RLM readers expose module status only. Do not infer public
+        # ELS lane state or enable status from the active/disable register bits.
+        return {}
 
     def get_banked_elsfp_status_flags(self) -> dict:
         return self.get_banked_elsfp_dom_flags()
