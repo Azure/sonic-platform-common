@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 from sonic_platform_base.sonic_xcvr.api.broadcom.bailly_oe import BaillyOeApi
 from sonic_platform_base.sonic_xcvr.api.broadcom.bailly_elsfp import BaillyElsfpApi
+from sonic_platform_base.sonic_xcvr.api.broadcom.davisson_oe import DavissonTh6OeApi
 from sonic_platform_base.sonic_xcvr.cpo.cpo_base import CpoHardwareInfo, OeId
 from sonic_platform_base.sonic_xcvr.cpo.oe import OeApiFactory
 from sonic_platform_base.sonic_xcvr.cpo.elsfp import ElsfpApiFactory
@@ -15,6 +16,11 @@ from sonic_platform_base.sonic_xcvr.fields import consts
 
 
 class TestBaillyCommonFactories(unittest.TestCase):
+    def test_hardware_ids_have_distinct_values(self):
+        self.assertEqual(OeId.BROADCOM_DAVISSON.value, 1)
+        self.assertEqual(OeId.NVIDIA_SPC6_CPO.value, 2)
+        self.assertEqual(OeId.BROADCOM_BAILLY.value, 3)
+
     def device(self, bank=0, base_page=0):
         data = bytearray(1024 * 1024)
         return SimpleNamespace(
@@ -68,12 +74,21 @@ class TestBaillyCommonFactories(unittest.TestCase):
     def test_davisson_keeps_automatic_identification(self):
         device = self.device()
         device.hardware_id.oe_id = OeId.BROADCOM_DAVISSON
+        self.assertIsInstance(OeApiFactory(device).create_api(), DavissonTh6OeApi)
         factory = ElsfpApiFactory(device)
         factory._get_elsfp_info = MagicMock()
         factory._create_api = MagicMock()
         self.assertIs(factory.create_api(), factory._create_api.return_value)
         factory._get_elsfp_info.assert_called_once_with()
         factory._create_api.assert_called_once()
+
+    def test_unknown_hardware_is_rejected(self):
+        device = self.device()
+        device.hardware_id = CpoHardwareInfo(None, None)
+        with self.assertRaises(ValueError):
+            OeApiFactory(device).create_api()
+        with self.assertRaises(ValueError):
+            ElsfpApiFactory(device).create_api()
 
 
 if __name__ == "__main__":
