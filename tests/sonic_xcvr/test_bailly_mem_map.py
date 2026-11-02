@@ -45,13 +45,20 @@ def test_endpoint_maps_have_disjoint_pages_and_legacy_keeps_both(bank, base_page
         bailly.MODULE_TEMPERATURE_MONITOR).get_offset()
 
 
-def test_legacy_module_keeps_endpoint_imports_compatible():
-    assert legacy_module.BaillyOeMemMap is BaillyOeMemMap
-    assert legacy_module.BaillyElsfpMemMap is BaillyElsfpMemMap
+@pytest.mark.parametrize("base_page", [0, 4])
+def test_legacy_and_endpoint_maps_own_independent_page_definitions(base_page):
     assert BaillyOeMemMap.__module__.endswith(".bailly_oe")
     assert BaillyElsfpMemMap.__module__.endswith(".bailly_elsfp")
-    legacy = BaillyMemMap(BaillyCodes)
-    els = BaillyElsfpMemMap(BaillyCodes)
-    assert {page.page: type(page) for page in legacy.pages if page.page >= 0xB0} == {
-        page.page: type(page) for page in els.pages
-    }
+    legacy = BaillyMemMap(BaillyCodes, base_page=base_page)
+    els = BaillyElsfpMemMap(BaillyCodes, base_page=base_page)
+    legacy_pages = {page.page: page for page in legacy.pages if page.page >= 0xB0}
+    assert set(legacy_pages) == {page.page for page in els.pages}
+    for page in els.pages:
+        old_page = legacy_pages[page.page]
+        assert type(old_page) is not type(page)
+        assert type(old_page).__name__ == type(page).__name__
+        assert type(old_page).__module__ == legacy_module.__name__
+        assert type(page).__module__ == BaillyElsfpMemMap.__module__
+    name = bailly.MODULE_TEMPERATURE_MONITOR
+    assert legacy.get_field(name) is not els.get_field(name)
+    assert legacy.get_field(name).get_offset() == els.get_field(name).get_offset()

@@ -1,4 +1,4 @@
-"""Bailly ELS memory map and RLM pages shared with the legacy combined map."""
+"""Bailly ELS memory map with copied RLM page definitions."""
 from ..public.cmis import CmisFlatMemMap
 from ..public.cmis.pages.page import CmisPage
 from ...fields.xcvr_field import (
