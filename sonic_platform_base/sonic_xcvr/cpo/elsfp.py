@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 
 from sonic_platform_base.sonic_xcvr.api.broadcom.davisson_elsfp import DavissonTh6ElsfpApi
-from sonic_platform_base.sonic_xcvr.codes.public.elsfp import ElsfpCodes
+from sonic_platform_base.sonic_xcvr.codes.broadcom.davisson_elsfp import DavissonTh6ElsfpCodes
+from sonic_platform_base.sonic_xcvr.api.nvidia.cpo_els import NvidiaCpoElsCmisApi
+from sonic_platform_base.sonic_xcvr.codes.nvidia.cpo_els import NvidiaCpoElsCodes
 from sonic_platform_base.sonic_xcvr.cpo.cpo_base import CpoApiFactory, CpoDeviceBase, OeId
 from sonic_platform_base.sonic_xcvr.eeprom_rw import ModuleEepromLowerMemoryInfo
 from sonic_platform_base.sonic_xcvr.mem_maps.broadcom.davisson_elsfp import DavissonTh6ElsfpMemMap
@@ -9,6 +11,7 @@ from sonic_platform_base.sonic_xcvr.codes.broadcom.bailly import BaillyCodes
 from sonic_platform_base.sonic_xcvr.mem_maps.broadcom.bailly_elsfp import BaillyElsfpMemMap
 from sonic_platform_base.sonic_xcvr.xcvr_eeprom import XcvrEeprom
 from sonic_platform_base.sonic_xcvr.api.broadcom.bailly_elsfp import BaillyElsfpApi
+from sonic_platform_base.sonic_xcvr.mem_maps.nvidia.cpo_els import NvidiaCpoElsCmisMemMap
 
 
 @dataclass
@@ -36,7 +39,7 @@ class ElsfpApiFactory(CpoApiFactory):
             elsfp_info = self._get_elsfp_info()
             if self._device.hardware_id.oe_id == OeId.BROADCOM_DAVISSON:
                 return self._create_api(
-                    codes_class=ElsfpCodes,
+                    codes_class=DavissonTh6ElsfpCodes,
                     mem_map_class=DavissonTh6ElsfpMemMap,
                     api_class=DavissonTh6ElsfpApi
                 )
@@ -47,6 +50,12 @@ class ElsfpApiFactory(CpoApiFactory):
                     BaillyCodes, bank=device.bank, base_page=device.base_page)
                 eeprom = XcvrEeprom(device.read_eeprom, device.write_eeprom, mem_map)
                 return BaillyElsfpApi(eeprom)
+            if self._device.hardware_id.oe_id == OeId.NVIDIA_SPC6_CPO:
+                return self._create_api(
+                    codes_class=NvidiaCpoElsCodes,
+                    mem_map_class=NvidiaCpoElsCmisMemMap,
+                    api_class=NvidiaCpoElsCmisApi
+                )
 
         # if self._device.hardware_id.elsfp_id == ElsfpId.EXAMPLE:
         #     self._create_api(...)
