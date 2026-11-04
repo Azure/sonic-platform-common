@@ -249,19 +249,27 @@ class TestBaillyElsfpSeparatedAggregates:
     def test_flags_do_not_expose_unverified_per_laser_bits(self, api, eeprom):
         eeprom.put(CONTROL_PAGE, 138, "4B", 0xFF, 0xFF, 0xFF, 0xFF)
         with patch.object(api, "get_lane_count", side_effect=AssertionError("Per-laser alarms requested")):
-            for method in (api.get_elsfp_dom_flags, api.get_elsfp_status_flags):
-                flags = method()
-                assert flags["temperature_alarm_high"] is False
-                assert not any("_lane" in key for key in flags)
+            flags = api.get_elsfp_dom_flags()
+            assert flags["temperature_alarm_high"] is False
+            assert not any("_lane" in key for key in flags)
+            assert api.get_elsfp_status_flags() == {"interrupt": True}
             assert api.get_banked_elsfp_dom_flags() == {}
             assert api.get_banked_elsfp_status_flags() == {}
 
-    def test_interrupt_is_reported_by_els_status_and_flags(self, api, eeprom):
-        eeprom.put(CONTROL_PAGE, 131, "B", 0x01)
-        assert api.get_elsfp_status()["interrupt_status"] == "Interrupt event cleared"
-        flags = api.get_elsfp_status_flags()
-        assert flags["interrupt_status"] == "Interrupt event cleared"
-        assert flags["temperature_alarm_high"] is False
+    @pytest.mark.parametrize("raw, message, occurred", [
+        (0, "Interrupt event occurred", True),
+        (1, "Interrupt event cleared", False),
+    ])
+    def test_interrupt_text_and_boolean_flags_are_separate(self, api, eeprom, raw, message, occurred):
+        eeprom.put(CONTROL_PAGE, 131, "B", raw)
+        assert api.get_elsfp_status()["interrupt_status"] == message
+        assert api.get_non_banked_elsfp_status_flags() == {"interrupt": occurred}
+        assert api.get_elsfp_status_flags() == {"interrupt": occurred}
+
+    @pytest.mark.parametrize("status", [None, {}, {"els_interrupt_status": "unknown"}])
+    def test_unavailable_interrupt_does_not_become_cleared(self, api, status):
+        with patch.object(api, "get_rlm_status", return_value=status):
+            assert api.get_non_banked_elsfp_status_flags() is None
 
     @pytest.mark.parametrize("method", ["get_non_banked_elsfp_dom_real_value", "get_elsfp_dom_flags",
                                         "get_elsfp_status_flags"])

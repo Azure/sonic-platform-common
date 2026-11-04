@@ -440,12 +440,14 @@ class BaillyElsfpApi(XcvrApi):
         return {"module_state": state, "interrupt_status": values.get("els_interrupt_status")}
 
     def get_non_banked_elsfp_status_flags(self) -> dict:
-        flags = self.get_non_banked_elsfp_dom_flags()
         status = self.get_rlm_status()
-        if flags is None or status is None:
+        if status is None:
             return None
-        flags["interrupt_status"] = status.get("els_interrupt_status")
-        return flags
+        interrupt = status.get("els_interrupt_status")
+        codes = self.xcvr_eeprom.mem_map.codes.INTERRUPT_STATUS
+        if interrupt not in (codes[0], codes[1]):
+            return None
+        return {"interrupt": interrupt == codes[0]}
 
     def get_banked_elsfp_status(self) -> dict:
         # Legacy RLM readers expose module status only. Do not infer public
