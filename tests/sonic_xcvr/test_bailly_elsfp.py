@@ -127,6 +127,13 @@ class TestBaillyElsfpApi:
         assert info["ext_identifier"] == "12.0W Max"
         assert info["lane_count"] == 8
         assert info["control_mode"] == "N/A"
+        assert info["cdb_supported"] is False
+
+    def test_unavailable_firmware_and_cdb_do_not_access_shared_oe_registers(self, api, eeprom):
+        with patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Unsupported EEPROM read")):
+            assert api.get_elsfp_info_firmware_versions() == {}
+            assert api.is_cdb_supported() is False
+        assert eeprom.writes == []
 
     def test_module_monitors(self, api):
         assert api.get_module_temperature() == 25.5

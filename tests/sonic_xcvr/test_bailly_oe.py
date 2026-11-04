@@ -118,3 +118,22 @@ def test_active_appsel_quirk(endpoints, applications):
     else:
         assert value == normal
         parent.assert_called_once_with()
+
+
+def test_no_extra_power_up_info_reads(endpoints):
+    _, reader, writer, oe, _ = endpoints
+    reader.reset_mock()
+    writer.reset_mock()
+    assert oe.get_transceiver_info_after_power_up() == {}
+    reader.assert_not_called()
+    writer.assert_not_called()
+
+
+def test_bailly_is_noncoherent_without_eeprom_detection(endpoints):
+    _, reader, writer, oe, _ = endpoints
+    reader.reset_mock()
+    writer.reset_mock()
+    with patch.object(CmisApi, "is_coherent_module", side_effect=AssertionError("Generic detection called")):
+        assert oe.is_coherent_module() is False
+    reader.assert_not_called()
+    writer.assert_not_called()

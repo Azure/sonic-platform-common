@@ -239,6 +239,7 @@ class BaillyElsfpApi(XcvrApi):
             "vendor_oui": vendor_info[bailly.VENDOR_OUI_HEX_FIELD],
             "vendor_rev": vendor_info[bailly.VENDOR_REVISION_ASCII_FIELD].rstrip(),
             "lane_count": lane_count,
+            "cdb_supported": self.is_cdb_supported(),
             "laser_wavelength_grid": cpo_info.get(bailly.LASER_WAVELENGTH_GRID),
         })
         # Preserve the old decoded control readback as an ELS extension. It is
@@ -246,6 +247,18 @@ class BaillyElsfpApi(XcvrApi):
         if power_mode is not None:
             info["rlm_laser_lpmode_control"] = power_mode.get(bailly.LASER_POWER_MODE_CONTROL_BITS_FIELD)
         return info
+
+    def get_elsfp_info_firmware_versions(self) -> dict:
+        """Return no firmware data: the RLM map exposes no firmware versions.
+
+        An empty dictionary lets telemetry consumers omit unavailable data
+        without reading the shared OE lower-memory firmware registers.
+        """
+        return {}
+
+    def is_cdb_supported(self) -> bool:
+        """CDB access is not provided by the Bailly RLM adapter."""
+        return False
 
     def get_module_temperature(self) -> float:
         return self.get_rlm_temperature()

@@ -60,6 +60,14 @@ class BaillyOeApi(CpoCmisApi):
     # Settle time after applying DataPathInit
     DPINIT_SETTLE_DELAY_SEC = 0.01
 
+    def get_transceiver_info_after_power_up(self) -> dict:
+        """No additional power-up-only identity fields are exposed by this adapter."""
+        return {}
+
+    def is_coherent_module(self) -> bool:
+        """Bailly is non-coherent; skip the CMIS manager's coherent controls."""
+        return False
+
     def get_dpinit_pending(self):
         # Bailly does not report DPInitPending; preserve its provisioning behavior.
         return {"DPInitPending{}".format(lane + 1): True for lane in range(self.NUM_CHANNELS)}
