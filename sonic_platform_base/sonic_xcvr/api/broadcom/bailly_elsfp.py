@@ -478,5 +478,8 @@ class BaillyElsfpApi(XcvrApi):
     def reset(self) -> bool:
         raise NotImplementedError("Bailly ELS reset is not available: the RLM has no reset register")
 
+    def get_per_lane_enable(self) -> list[int]:
+        raise NotImplementedError("Bailly ELS per-lane enable query is not supported")
+
     def set_per_lane_enable(self, lane_mask: int, enabled: bool) -> bool:
         raise NotImplementedError("Bailly ELS laser enable control is not available through the RLM registers")

@@ -184,9 +184,14 @@ class TestBaillyElsfpApi:
     def test_unavailable_lane_queries_are_not_exposed(self, api):
         # The public framework supports these methods; legacy Bailly does not.
         assert not hasattr(api, "get_per_lane_state")
-        assert not hasattr(api, "get_per_lane_enable")
         with patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Unsupported EEPROM read")):
             assert api.get_banked_elsfp_status() == {}
+
+    def test_lane_enable_query_is_not_supported(self, api, eeprom):
+        with patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Unsupported EEPROM read")):
+            with pytest.raises(NotImplementedError):
+                api.get_per_lane_enable()
+        assert eeprom.writes == []
 
     def test_read_failures(self, api, eeprom):
         eeprom.fail_reads = True
