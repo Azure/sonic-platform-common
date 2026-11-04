@@ -24,7 +24,6 @@ from ...mem_maps.public.cmis.pages.consts import CMIS_LANES_PER_BANK
 BAILLY_MAX_LASERS = 16
 
 MODULE_STATE_LOW_POWER = "ModuleLowPwr"
-MODULE_STATE_READY = "ModuleReady"
 
 
 class BaillyElsfpApi(XcvrApi):
@@ -421,15 +420,30 @@ class BaillyElsfpApi(XcvrApi):
         codes = self.xcvr_eeprom.mem_map.codes
         if power_mode == codes.POWER_MODE[1]:
             return MODULE_STATE_LOW_POWER
-        if power_mode == codes.POWER_MODE[0]:
-            return MODULE_STATE_READY
         return "Unknown"
 
     def get_module_fault_cause(self) -> str:
         raise NotImplementedError("Bailly RLM does not report an ELS module fault cause")
 
+    def get_lpmode(self) -> bool:
+        """Return RLM low-power readback, or None if unavailable.
+
+        False means high-power mode; it does not imply ModuleReady.
+        """
+        status = self.get_rlm_status()
+        if status is None:
+            return None
+        power_mode = status.get("els_module_low_power_state")
+        codes = self.xcvr_eeprom.mem_map.codes.POWER_MODE
+        if power_mode not in (codes[0], codes[1]):
+            return None
+        return power_mode == codes[1]
+
     def get_module_state(self) -> str:
-        # This adapts power-mode readback, not a complete ELS state machine.
+        """Report low power when asserted; other module states are unknown.
+
+        The RLM power bit cannot distinguish startup, fault and readiness.
+        """
         return self._module_state_from_status(self.get_rlm_status())
 
     def get_non_banked_elsfp_status(self) -> dict:

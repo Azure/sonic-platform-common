@@ -174,12 +174,25 @@ class TestBaillyElsfpApi:
 
     @pytest.mark.parametrize("status_byte, state", [
         (0b10, "ModuleLowPwr"),
-        (0b00, "ModuleReady"),
+        (0b00, "Unknown"),
     ])
     def test_module_state(self, api, eeprom, status_byte, state):
         eeprom.put(CONTROL_PAGE, 131, "B", status_byte)
         assert api.get_module_state() == state
         assert api.get_elsfp_status()["module_state"] == state
+
+    @pytest.mark.parametrize("status_byte, expected", [(0, False), (1, False), (2, True), (3, True)])
+    def test_low_power_readback_is_boolean_not_readiness(self, api, eeprom, status_byte, expected):
+        eeprom.put(CONTROL_PAGE, 131, "B", status_byte)
+        assert api.get_lpmode() is expected
+        assert api.get_module_state() == ("ModuleLowPwr" if expected else "Unknown")
+
+    @pytest.mark.parametrize("status", [None, {}, {"els_module_low_power_state": "unknown"}])
+    def test_low_power_unavailable_is_not_high_power(self, api, status):
+        with patch.object(api, "get_rlm_status", return_value=status) as read, \
+                patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Extra EEPROM read")):
+            assert api.get_lpmode() is None
+        read.assert_called_once_with()
 
     def test_unavailable_lane_queries_are_not_exposed(self, api):
         # The public framework supports these methods; legacy Bailly does not.
@@ -379,7 +392,7 @@ class TestBaillyElsfpLegacyAdapters:
                 "els_module_low_power_state": "High power mode", "els_interrupt_status": "Interrupt event cleared"}):
             with patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Extra EEPROM read")):
                 assert api.get_elsfp_status() == {
-                    "module_state": "ModuleReady", "interrupt_status": "Interrupt event cleared",
+                    "module_state": "Unknown", "interrupt_status": "Interrupt event cleared",
                 }
 
 
