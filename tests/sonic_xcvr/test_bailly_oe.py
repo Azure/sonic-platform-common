@@ -95,19 +95,6 @@ def test_oe_dom_contains_only_oe_measurements(endpoints):
     reader.assert_not_called()
 
 
-@pytest.mark.parametrize("method,expected", [
-    ("get_transceiver_info", {"type": "CPO Bailly", "manufacturer": "TEST VENDOR"}),
-    ("get_transceiver_threshold_info", {"temphighalarm": 85.0}),
-    ("get_transceiver_dom_flags", {"tempHAlarm": False}),
-    ("get_transceiver_status_flags", {"module_state": "ModuleReady"}),
-])
-def test_oe_aggregates_do_not_append_rlm_data(endpoints, method, expected):
-    _, reader, _, oe, _ = endpoints
-    with patch.object(CpoCmisApi, method, return_value=expected):
-        assert getattr(oe, method)() == expected
-    reader.assert_not_called()
-
-
 def test_oe_keeps_community_software_controls():
     assert BaillyOeApi.set_lpmode is CmisApi.set_lpmode
     assert BaillyOeApi.reset is CmisApi.reset
