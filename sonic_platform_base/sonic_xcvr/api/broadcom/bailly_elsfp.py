@@ -12,14 +12,9 @@
 """
 import copy
 
-from ..public.elsfp import (
-    ELSFP_BANKED_DOM_REAL_VALUE_DEFAULT_DICT,
-    ELSFP_INFO_DEFAULT_DICT,
-)
+from ..public.elsfp import ELSFP_INFO_DEFAULT_DICT
 from ..xcvr_api import XcvrApi
-from ...fields import elsfp_consts
 from ...fields.broadcom import bailly
-from ...mem_maps.public.cmis.pages.consts import CMIS_LANES_PER_BANK
 
 BAILLY_MAX_LASERS = 16
 
@@ -191,10 +186,6 @@ class BaillyElsfpApi(XcvrApi):
 
     # Public ELSFP adapters. These do not redefine RLM register decoding.
 
-    def _get_first_lane_for_bank(self) -> int:
-        """Preserve the public aggregate numbering for the selected endpoint."""
-        return self.xcvr_eeprom.mem_map.bank * CMIS_LANES_PER_BANK + 1
-
     @staticmethod
     def _lane_count_from_info(cpo_info):
         if cpo_info is None:
@@ -269,34 +260,6 @@ class BaillyElsfpApi(XcvrApi):
     def get_icc_monitor(self) -> float:
         raise NotImplementedError("Bailly ELS does not report a supply current monitor")
 
-    def _per_laser_values(self, values, laser_field, public_field, convert):
-        if values is None:
-            return None
-        count = self.get_lane_count()
-        if count is None:
-            return None
-        result = {}
-        for laser in range(count):
-            value = values.get(laser_field.format(laser))
-            if value is None or isinstance(value, dict):
-                return None
-            result["%s%d" % (public_field, laser + 1)] = convert(value)
-        return result
-
-    def get_per_lane_bias_current_monitor(self) -> dict:
-        # Legacy mA -> public monitor A; DOM/display converts A to mA.
-        return self._per_laser_values(self.get_rlm_laser_current(), bailly.LASER_CURRENT_MONITOR,
-                                      elsfp_consts.BIAS_CURRENT_MONITOR_FIELD, lambda ma: ma / 1000.0)
-
-    def get_per_lane_opt_power_monitor(self) -> dict:
-        # Both legacy and public single-monitor values are mW.
-        return self._per_laser_values(self.get_rlm_laser_power(), bailly.LASER_OPTICAL_POWER_MONITOR,
-                                      elsfp_consts.OPT_POWER_MONITOR_FIELD, lambda mw: mw)
-
-    def get_per_lane_voltage_monitor(self) -> dict:
-        return self._per_laser_values(self.get_rlm_laser_voltage(), bailly.LASER_VOLTAGE_MONITOR,
-                                      elsfp_consts.VOLTAGE_MONITOR_FIELD, lambda volts: volts)
-
     def get_non_banked_elsfp_dom_real_value(self) -> dict:
         values = self.get_rlm_monitor_values()
         if values is None or values.get("els_temperature") is None or values.get("els_voltage") is None:
@@ -305,23 +268,9 @@ class BaillyElsfpApi(XcvrApi):
                 "tec_current": values.get("rlm_tec_current")}
 
     def get_banked_elsfp_dom_real_value(self) -> dict:
-        bias_current = self.get_per_lane_bias_current_monitor()
-        optical_power = self.get_per_lane_opt_power_monitor()
-        voltage = self.get_per_lane_voltage_monitor()
-        if None in (bias_current, optical_power, voltage):
-            return None
-
-        # Bailly has no supply current monitor, so "icc" keeps its default.
-        dom = copy.deepcopy(ELSFP_BANKED_DOM_REAL_VALUE_DEFAULT_DICT)
-        first_lane = self._get_first_lane_for_bank()
-        for name, field, values, convert in (
-                ("laser_bias_current", elsfp_consts.BIAS_CURRENT_MONITOR_FIELD, bias_current, self.amps_to_ma),
-                ("optical_power", elsfp_consts.OPT_POWER_MONITOR_FIELD, optical_power, self.mw_to_dbm),
-                ("voltage", elsfp_consts.VOLTAGE_MONITOR_FIELD, voltage, lambda volts: volts)):
-            for index in range(len(values)):
-                value = convert(values["%s%d" % (field, index + 1)])
-                dom["%s_lane%d" % (name, first_lane + index)] = float("{:.3f}".format(value))
-        return dom
+        # RLM laser monitors have no verified mapping to public ELSFP lanes.
+        # Keep the raw get_rlm_laser_* readers without inventing lane fields.
+        return {}
 
     def get_elsfp_dom_real_value(self) -> dict:
         module = self.get_non_banked_elsfp_dom_real_value()

@@ -141,24 +141,23 @@ class TestBaillyElsfpApi:
         with pytest.raises(NotImplementedError):
             api.get_icc_monitor()
 
-    def test_per_lane_monitors_use_public_names_and_units(self, api):
-        bias = api.get_per_lane_bias_current_monitor()
-        power = api.get_per_lane_opt_power_monitor()
-        voltage = api.get_per_lane_voltage_monitor()
-        assert sorted(bias) == ["BiasCurrentMonitor%d" % lane for lane in range(1, 9)]
-        assert bias["BiasCurrentMonitor1"] == pytest.approx(0.25)
-        assert power["OptPowerMonitor2"] == pytest.approx(70.01)
-        assert voltage["VoltageMonitor8"] == pytest.approx(1.57)
+    def test_unverified_per_lane_monitors_are_not_exposed(self, api):
+        for method in ("get_per_lane_bias_current_monitor",
+                       "get_per_lane_opt_power_monitor",
+                       "get_per_lane_voltage_monitor"):
+            assert not hasattr(api, method)
 
-    def test_dom_real_value(self, api):
-        dom = api.get_elsfp_dom_real_value()
-        assert dom["temperature"] == 25.5
-        assert dom["voltage"] == 3.3
-        assert dom["icc"] == "N/A"
-        assert dom["laser_bias_current_lane1"] == 250.0
-        assert dom["optical_power_lane1"] == round(10 * math.log10(70.0), 3)
-        assert dom["voltage_lane8"] == 1.57
-        assert "laser_bias_current_lane9" not in dom
+    @pytest.mark.parametrize("laser_count", [8, 16])
+    def test_dom_preserves_module_values_without_laser_lane_assumptions(self, api, eeprom, laser_count):
+        program_rlm(eeprom, laser_count=laser_count)
+        with patch.object(api, "get_rlm_laser_current", side_effect=AssertionError("Laser current requested")), \
+                patch.object(api, "get_rlm_laser_power", side_effect=AssertionError("Laser power requested")), \
+                patch.object(api, "get_rlm_laser_voltage", side_effect=AssertionError("Laser voltage requested")):
+            assert api.get_elsfp_dom_real_value() == {
+                "temperature": 25.5, "voltage": 3.3, "tec_current": 0.0,
+            }
+        with patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Unexpected EEPROM read")):
+            assert api.get_banked_elsfp_dom_real_value() == {}
 
     def test_threshold_info(self, api):
         thresholds = api.get_elsfp_threshold_info()
@@ -318,27 +317,6 @@ class TestBaillyElsfpLegacyAdapters:
                 assert api.get_module_temperature() == 31.125
         legacy.assert_called_once_with()
 
-    @pytest.mark.parametrize("count", [8, 16])
-    @pytest.mark.parametrize("raw_method, public_method, raw_key, public_key, factor", [
-        ("get_rlm_laser_current", "get_per_lane_bias_current_monitor",
-         "Laser{}CurrentMonitor", "BiasCurrentMonitor", 0.001),
-        ("get_rlm_laser_power", "get_per_lane_opt_power_monitor",
-         "Laser{}OpticalPowerMonitor", "OptPowerMonitor", 1),
-        ("get_rlm_laser_voltage", "get_per_lane_voltage_monitor",
-         "Laser{}VoltageMonitor", "VoltageMonitor", 1),
-    ])
-    def test_monitor_adapters_rename_and_convert(
-            self, api, count, raw_method, public_method, raw_key, public_key, factor):
-        raw = {raw_key.format(laser): 100 + laser for laser in range(16)}
-        with patch.object(api, raw_method, return_value=raw) as legacy:
-            with patch.object(api, "get_lane_count", return_value=count):
-                with patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Extra hardware read")):
-                    values = getattr(api, public_method)()
-        assert values == pytest.approx({public_key + str(laser + 1): (100 + laser) * factor
-                                       for laser in range(count)})
-        assert len(raw) == 16
-        legacy.assert_called_once_with()
-
     def test_module_values_adapt_legacy_dictionary(self, api):
         raw = {"els_temperature": 26.5, "els_voltage": 3.2, "rlm_tec_current": 12.5}
         with patch.object(api, "get_rlm_monitor_values", return_value=raw):
@@ -359,9 +337,6 @@ class TestBaillyElsfpLegacyAdapters:
             assert api.get_non_banked_elsfp_dom_real_value() is None
 
     @pytest.mark.parametrize("method, raw_method, result", [
-        ("get_per_lane_bias_current_monitor", "get_rlm_laser_current", {"Laser0CurrentMonitor": None}),
-        ("get_per_lane_opt_power_monitor", "get_rlm_laser_power", {}),
-        ("get_per_lane_voltage_monitor", "get_rlm_laser_voltage", None),
         ("get_elsfp_threshold_info", "get_rlm_thresholds", {"els_temphighalarm": 75.0}),
         ("get_non_banked_elsfp_dom_flags", "get_rlm_flags", {}),
         ("get_module_state", "get_rlm_status", None),
