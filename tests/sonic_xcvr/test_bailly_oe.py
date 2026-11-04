@@ -105,19 +105,42 @@ def test_dpinit_pending_quirk(endpoints):
     assert oe.get_dpinit_pending() == {"DPInitPending%d" % lane: True for lane in range(1, 9)}
 
 
-@pytest.mark.parametrize("applications", [[1, 2, 0, 3, 4, 5, 6, 7], [1] * 8])
-def test_active_appsel_quirk(endpoints, applications):
-    oe = endpoints[3]
+@pytest.mark.parametrize("applications", [[1, 2, 0, 3, 4, 5, 6, 7], [1] * 8, [15] * 7 + [0]])
+def test_active_appsel_quirk_uses_one_selected_bank_read(endpoints, applications):
+    data, reader, writer, oe, _ = endpoints
+    start, size = oe._get_appl_sel_block()
+    data[start:start + size] = bytearray((app << 4) | 0x09 for app in applications)
+    # Exclude the cached flat-memory capability check from the AppSel I/O count.
+    assert oe.is_flat_memory() is False
+    reader.reset_mock()
     normal = {"ActiveAppSelLane%d" % lane: 2 for lane in range(1, 9)}
-    with patch.object(oe, "get_application", side_effect=applications), \
-            patch.object(CmisApi, "get_active_apsel_hostlane", return_value=normal) as parent:
+    with patch.object(CmisApi, "get_active_apsel_hostlane", return_value=normal) as parent:
         value = oe.get_active_apsel_hostlane()
+    reader.assert_called_once_with(start, 8)
+    writer.assert_not_called()
     if 0 in applications:
         assert value == {"ActiveAppSelLane%d" % (lane + 1): app for lane, app in enumerate(applications)}
         parent.assert_not_called()
     else:
         assert value == normal
         parent.assert_called_once_with()
+
+
+@pytest.mark.parametrize("raw", [None, bytearray(7), bytearray()])
+def test_active_appsel_failed_or_short_read_does_not_publish_partial_lanes(endpoints, raw):
+    _, _, _, oe, _ = endpoints
+    with patch.object(oe.xcvr_eeprom, "read_raw", return_value=raw), \
+            patch.object(CmisApi, "get_active_apsel_hostlane") as parent:
+        assert oe.get_active_apsel_hostlane() is None
+    parent.assert_not_called()
+
+
+def test_active_appsel_flat_memory_preserves_zero_sentinels_without_page_read(endpoints):
+    _, reader, writer, oe, _ = endpoints
+    with patch.object(oe, "is_flat_memory", return_value=True):
+        assert oe.get_active_apsel_hostlane() == {"ActiveAppSelLane%d" % lane: 0 for lane in range(1, 9)}
+    reader.assert_not_called()
+    writer.assert_not_called()
 
 
 def test_no_extra_power_up_info_reads(endpoints):

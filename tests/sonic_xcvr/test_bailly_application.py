@@ -75,11 +75,16 @@ def test_non_contiguous_application_block_returns_failure(endpoint):
     endpoint.writer.assert_not_called()
 
 
-def test_unreadable_application_block_does_not_write(endpoint):
+def test_unreadable_application_block_reports_failure(endpoint):
     endpoint.reader.return_value = None
     endpoint.reader.side_effect = lambda offset, size: bytearray([0]) if offset == 2 else None
     assert not endpoint.api.set_application(0xFF, 1)
-    endpoint.writer.assert_not_called()
+    if isinstance(endpoint.api, BaillyOeApi):
+        # The optimized path writes once, then reports failed readback.
+        assert endpoint.writer.call_count == 1
+    else:
+        # The retained legacy path still probes the block before writing.
+        endpoint.writer.assert_not_called()
 
 
 def test_application_write_failure_is_reported(endpoint):
@@ -90,17 +95,19 @@ def test_application_write_failure_is_reported(endpoint):
 
 def test_application_readback_retries_then_succeeds(endpoint):
     expected = bytearray([0x10] * 4 + [0x18] * 4)
-    with patch.object(endpoint.api, '_get_all_application_raw',
-                      side_effect=[bytearray(8), None, bytearray(8), expected]) as reads:
+    sequence = [None, bytearray(8), expected]
+    if not isinstance(endpoint.api, BaillyOeApi):
+        sequence.insert(0, bytearray(8))  # Legacy pre-write probe.
+    with patch.object(endpoint.api, '_get_all_application_raw', side_effect=sequence) as reads:
         assert endpoint.api.set_application(0xFF, 1)
-    assert reads.call_count == 4
+    assert reads.call_count == len(sequence)
     assert endpoint.sleep.call_args_list == [call(0.1), call(0.1)]
 
 
 def test_application_readback_failure_is_bounded(endpoint):
     with patch.object(endpoint.api, '_get_all_application_raw', return_value=bytearray(8)) as reads:
         assert not endpoint.api.set_application(0xFF, 1)
-    assert reads.call_count == 4
+    assert reads.call_count == (3 if isinstance(endpoint.api, BaillyOeApi) else 4)
     assert endpoint.sleep.call_args_list == [call(0.1)] * 3
 
 
@@ -127,3 +134,24 @@ def test_dpinit_write_failure_does_not_report_success(endpoint, error):
 def test_els_does_not_acquire_oe_provisioning_overrides():
     assert 'set_application' not in BaillyElsfpApi.__dict__
     assert 'scs_apply_datapath_init' not in BaillyElsfpApi.__dict__
+
+
+def test_successful_application_write_and_verification_io_order(endpoint):
+    api = endpoint.api
+    assert api.is_flat_memory() is False
+    start, size = api._get_appl_sel_block()
+    operations = MagicMock()
+    operations.attach_mock(endpoint.reader, "read")
+    operations.attach_mock(endpoint.writer, "write")
+    expected = bytearray([0x10] * 4 + [0x18] * 4)
+    assert api.set_application(0xFF, 1)
+    order = [call.write(start, size, expected), call.read(start, size)]
+    if not isinstance(api, BaillyOeApi):
+        order.insert(0, call.read(start, size))
+    assert operations.mock_calls == order
+
+
+def test_flat_memory_configuration_does_not_write(endpoint):
+    with patch.object(endpoint.api, "is_flat_memory", return_value=True):
+        assert endpoint.api.set_application(0xFF, 1) is False
+    endpoint.writer.assert_not_called()

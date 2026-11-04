@@ -74,8 +74,14 @@ class BaillyOeApi(CpoCmisApi):
 
     def get_active_apsel_hostlane(self):
         # A configured AppSel 0 is not supported by Bailly's active-AppSel report.
-        current = {"ActiveAppSelLane{}".format(lane + 1): self.get_application(lane)
-                   for lane in range(self.NUM_CHANNELS)}
+        if self.is_flat_memory():
+            return {"ActiveAppSelLane{}".format(lane + 1): 0 for lane in range(self.NUM_CHANNELS)}
+        raw = self._get_all_application_raw()
+        if raw is None:
+            return None
+        current = {"ActiveAppSelLane{}".format(lane + 1):
+                   (value >> self.APPL_SEL_CODE_SHIFT) & self.APPL_SEL_CODE_MAX
+                   for lane, value in enumerate(raw)}
         if 0 in current.values():
             return current
         return super().get_active_apsel_hostlane()
@@ -161,6 +167,9 @@ class BaillyOeApi(CpoCmisApi):
             return None
 
         raw_buf = bytearray(raw_buf)
+        if len(raw_buf) != size:
+            log_error("_get_all_application_raw: short read {} bytes (expect {})".format(len(raw_buf), size))
+            return None
         log_debug("_get_all_application_raw: start_addr {}, raw_buf: {}".format(
             start_offset, _to_hex(raw_buf)))
         return raw_buf
@@ -240,15 +249,10 @@ class BaillyOeApi(CpoCmisApi):
                 appl_code, channel))
             return False
 
+        if self.is_flat_memory():
+            return False
         start_offset, size = self._get_appl_sel_block()
         if start_offset is None:
-            return False
-
-        # Read the whole block first: it validates that page 10h is reachable
-        # and logs the state before the update.
-        if self._get_all_application_raw() is None:
-            log_error("set_application: unable to read ApSel block for channel {:#x}, appl_code {}".format(
-                channel, appl_code))
             return False
 
         write_buf = self._build_appl_sel_buffer(appl_code, ec)
