@@ -61,49 +61,6 @@ class CpoDeviceBase(device_base.DeviceBase, EepromReadWriteMixin):
     def remove_api(self):
         self._api = None
 
-    # Platform hooks for low-power mode and reset. Platforms implement them with
-    # whatever their hardware provides, such as dedicated pins or EEPROM
-    # controls. Client code that wants the software path can call the protocol API
-    # from get_api() directly.
-    def get_reset_status(self) -> bool:
-        """
-        Retrieves the reset state of the CPO endpoint
-
-        Returns:
-            A Boolean, True if the CPO endpoint is held in reset, False if not
-        """
-        raise NotImplementedError
-
-    def reset(self) -> bool:
-        """
-        Resets the CPO endpoint
-
-        Returns:
-            A boolean, True if successful, False if not
-        """
-        raise NotImplementedError
-
-    def get_lpmode(self) -> bool:
-        """
-        Retrieves the low-power mode of the CPO endpoint
-
-        Returns:
-            A Boolean, True if the CPO endpoint is in low-power mode, False if not
-        """
-        raise NotImplementedError
-
-    def set_lpmode(self, lpmode: bool) -> bool:
-        """
-        Puts the CPO endpoint in low-power or full-power mode
-
-        Args:
-            lpmode: A Boolean, True to enter low-power mode, False to leave it
-
-        Returns:
-            A boolean, True if successful, False if not
-        """
-        raise NotImplementedError
-
 
 class CpoBase(device_base.DeviceBase):
     def __init__(self, hardware_id: CpoHardwareInfo, oe: "OeBase", elsfp: "ElsfpBase"):
@@ -124,51 +81,27 @@ class CpoBase(device_base.DeviceBase):
         self.oe.remove_api()
         self.elsfp.remove_api()
 
-    # Platform hooks for the CPO virtual module. Low-power mode and reset act
-    # through its module controller; a controller may serve several ports, in
-    # which case every port it serves is affected. Tx-disable acts on the
-    # virtual module's channels. Platforms implement these hooks with whatever
-    # their hardware provides, such as dedicated pins or EEPROM controls.
-    # Client code that wants the software path can call the module API from
-    # get_xcvr_api() directly.
+    # Controls default to the associated OE object, preserving platform
+    # overrides. Reset and low-power mode affect all banks and associated ports
+    # of the OE, rather than only the interface represented by this object.
+    # In X(CpoBase, SfpOptoeBase), these hooks shadow same-named methods from
+    # SfpOptoeBase. Put a mixin whose implementation should take precedence
+    # before CpoBase, or explicitly override/delegate the hook on the platform.
     def get_reset_status(self) -> bool:
-        """
-        Retrieves the reset state of the CPO virtual module
-
-        Returns:
-            A Boolean, True if the module is held in reset, False if not
-        """
-        raise NotImplementedError
+        """Delegate to the associated OE; platforms may override this hook."""
+        return self.oe.get_reset_status()
 
     def reset(self) -> bool:
-        """
-        Resets the CPO virtual module
-
-        Returns:
-            A boolean, True if successful, False if not
-        """
-        raise NotImplementedError
+        """Delegate to the associated OE; platforms may override this hook."""
+        return self.oe.reset()
 
     def get_lpmode(self) -> bool:
-        """
-        Retrieves the low-power mode of the CPO virtual module
-
-        Returns:
-            A Boolean, True if the module is in low-power mode, False if not
-        """
-        raise NotImplementedError
+        """Delegate to the associated OE; platforms may override this hook."""
+        return self.oe.get_lpmode()
 
     def set_lpmode(self, lpmode: bool) -> bool:
-        """
-        Puts the CPO virtual module in low-power or full-power mode
-
-        Args:
-            lpmode: A Boolean, True to enter low-power mode, False to leave it
-
-        Returns:
-            A boolean, True if successful, False if not
-        """
-        raise NotImplementedError
+        """Delegate to the associated OE; platforms may override this hook."""
+        return self.oe.set_lpmode(lpmode)
 
     def get_tx_disable(self) -> list:
         """

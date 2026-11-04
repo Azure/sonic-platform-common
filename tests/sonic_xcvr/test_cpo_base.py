@@ -20,8 +20,8 @@ from sonic_platform_base.sonic_xcvr.cpo.elsfp import ElsfpBase
 SOME_OE_ID = OeId.BROADCOM_DAVISSON
 SOME_ELSFP_ID = None
 
-# Low-power mode and reset hooks that the CPO base classes leave to platforms,
-# as (method_name, args).
+# Endpoint hooks, as (method_name, args). Control defaults call the API;
+# status readback remains platform-defined.
 PLATFORM_HOOKS = [
     ("get_reset_status", ()),
     ("reset", ()),
@@ -37,7 +37,7 @@ CPO_PLATFORM_HOOKS = PLATFORM_HOOKS + [
 
 
 class TestOeBase(object):
-    @pytest.mark.parametrize("method_name, args", PLATFORM_HOOKS)
+    @pytest.mark.parametrize("method_name, args", [("get_reset_status", ()), ("get_lpmode", ())])
     def test_platform_hooks_raise(self, method_name, args):
         oe = OeBase(CpoHardwareInfo(oe_id=SOME_OE_ID, elsfp_id=SOME_ELSFP_ID))
 
@@ -68,7 +68,7 @@ class TestOeBase(object):
 
 
 class TestElsfpBase(object):
-    @pytest.mark.parametrize("method_name, args", PLATFORM_HOOKS)
+    @pytest.mark.parametrize("method_name, args", [("get_reset_status", ()), ("get_lpmode", ())])
     def test_platform_hooks_raise(self, method_name, args):
         elsfp = ElsfpBase(CpoHardwareInfo(oe_id=SOME_OE_ID, elsfp_id=SOME_ELSFP_ID))
 
@@ -138,19 +138,24 @@ class TestCpoBase(object):
         assert cpo.get_xcvr_api() is oe_api
         oe.get_api.assert_called_with()
 
-    @pytest.mark.parametrize("method_name, args", CPO_PLATFORM_HOOKS)
-    def test_platform_hooks_raise(self, method_name, args):
-        hardware_id = CpoHardwareInfo(oe_id=SOME_OE_ID, elsfp_id=SOME_ELSFP_ID)
-        oe, elsfp = OeBase(hardware_id), ElsfpBase(hardware_id)
-        oe.get_api = MagicMock()
-        elsfp.get_api = MagicMock()
+    @pytest.mark.parametrize("method_name, args", PLATFORM_HOOKS)
+    @pytest.mark.parametrize("result", [True, False])
+    def test_controls_delegate_to_oe_object_not_els_or_direct_api(self, method_name, args, result):
+        hardware_id = CpoHardwareInfo(SOME_OE_ID, SOME_ELSFP_ID)
+        oe, elsfp = MagicMock(), MagicMock()
+        getattr(oe, method_name).return_value = result
         cpo = CpoBase(hardware_id, oe, elsfp)
 
+        assert getattr(cpo, method_name)(*args) is result
+        getattr(oe, method_name).assert_called_once_with(*args)
+        oe.get_api.assert_not_called()
+        assert elsfp.mock_calls == []
+
+    @pytest.mark.parametrize("method_name, args", [("get_tx_disable", ()), ("tx_disable", (True,))])
+    def test_tx_disable_still_requires_platform_hook(self, method_name, args):
+        cpo = CpoBase(None, MagicMock(), MagicMock())
         with pytest.raises(NotImplementedError):
             getattr(cpo, method_name)(*args)
-        # The hooks do not fall back to the software path.
-        oe.get_api.assert_not_called()
-        elsfp.get_api.assert_not_called()
 
     def test_platform_hooks_can_be_implemented(self):
         class PlatformCpo(CpoBase):
@@ -174,12 +179,12 @@ class StubOptoeElsfp(OptoeElsfpBase):
         return "/unused-eeprom"
 
 
-@pytest.mark.parametrize("endpoint_class", [StubOptoeOe, StubOptoeElsfp])
+@pytest.mark.parametrize("endpoint_class", [OeBase, ElsfpBase, StubOptoeOe, StubOptoeElsfp])
 @pytest.mark.parametrize("method_name, args", [
     ("set_lpmode", (True,)), ("set_lpmode", (False,)), ("reset", ()),
 ])
 @pytest.mark.parametrize("result", [True, False])
-def test_optoe_controls_forward_arguments_and_result(endpoint_class, method_name, args, result):
+def test_endpoint_controls_forward_arguments_and_result(endpoint_class, method_name, args, result):
     endpoint = endpoint_class(CpoHardwareInfo(SOME_OE_ID, SOME_ELSFP_ID))
     api = MagicMock()
     getattr(api, method_name).return_value = result
@@ -189,9 +194,9 @@ def test_optoe_controls_forward_arguments_and_result(endpoint_class, method_name
     getattr(api, method_name).assert_called_once_with(*args)
 
 
-@pytest.mark.parametrize("endpoint_class", [StubOptoeOe, StubOptoeElsfp])
+@pytest.mark.parametrize("endpoint_class", [OeBase, ElsfpBase, StubOptoeOe, StubOptoeElsfp])
 @pytest.mark.parametrize("method_name, args", [("set_lpmode", (True,)), ("reset", ())])
-def test_optoe_controls_preserve_unsupported_api_operations(endpoint_class, method_name, args):
+def test_endpoint_controls_preserve_unsupported_api_operations(endpoint_class, method_name, args):
     endpoint = endpoint_class(CpoHardwareInfo(SOME_OE_ID, SOME_ELSFP_ID))
     api = MagicMock()
     getattr(api, method_name).side_effect = NotImplementedError("unsupported endpoint control")
@@ -201,7 +206,7 @@ def test_optoe_controls_preserve_unsupported_api_operations(endpoint_class, meth
         getattr(endpoint, method_name)(*args)
 
 
-@pytest.mark.parametrize("endpoint_class", [StubOptoeOe, StubOptoeElsfp])
+@pytest.mark.parametrize("endpoint_class", [OeBase, ElsfpBase, StubOptoeOe, StubOptoeElsfp])
 @pytest.mark.parametrize("method_name, args", [("set_lpmode", (True,)), ("reset", ())])
 def test_platform_override_bypasses_optoe_api_default(endpoint_class, method_name, args):
     hardware_control = MagicMock(return_value=True)

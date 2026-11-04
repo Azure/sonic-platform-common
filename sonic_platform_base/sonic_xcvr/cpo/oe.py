@@ -38,3 +38,26 @@ class OeApiFactory(CpoApiFactory):
 class OeBase(CpoDeviceBase):
     def _make_api_factory(self) -> CpoApiFactory:
         return OeApiFactory(self)
+
+    def get_reset_status(self) -> bool:
+        """Return whether the OE is held in reset; platforms provide readback."""
+        raise NotImplementedError
+
+    def get_lpmode(self) -> bool:
+        """Return OE low-power status; platforms provide readback."""
+        raise NotImplementedError
+
+    def set_lpmode(self, lpmode: bool) -> bool:
+        """Request OE low-power mode through its API; platforms may override.
+
+        Low-power control applies to the entire OE, including all banks and
+        associated ports, rather than only the bank used to access this object.
+        """
+        return self.get_api().set_lpmode(lpmode)
+
+    def reset(self) -> bool:
+        """Reset the OE through its API; platforms may override.
+
+        Reset affects the entire OE, including all banks and associated ports.
+        """
+        return self.get_api().reset()

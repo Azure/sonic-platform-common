@@ -69,3 +69,20 @@ class ElsfpApiFactory(CpoApiFactory):
 class ElsfpBase(CpoDeviceBase):
     def _make_api_factory(self) -> CpoApiFactory:
         return ElsfpApiFactory(self)
+
+    def get_reset_status(self) -> bool:
+        """Return whether the ELSFP is held in reset; platforms provide readback."""
+        raise NotImplementedError
+
+    def get_lpmode(self) -> bool:
+        """Return ELSFP low-power status; platforms provide readback."""
+        raise NotImplementedError
+
+    def set_lpmode(self, lpmode: bool) -> bool:
+        """Request ELSFP low-power mode through its API; platforms may override."""
+        return self.get_api().set_lpmode(lpmode)
+
+    def reset(self) -> bool:
+        """Reset the ELSFP through its API; platforms may override.
+        """
+        return self.get_api().reset()
