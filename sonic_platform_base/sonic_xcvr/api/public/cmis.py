@@ -28,6 +28,7 @@ VDM_UNFREEZE = 0
 
 DATAPATH_INIT_DURATION_MULTIPLIER = 10
 DATAPATH_INIT_DURATION_OVERRIDE_THRESHOLD = 1000
+MODULE_PWRDN_DURATION_MIN_MS = 3000.0
 
 class VdmSubtypeIndex(Enum):
     VDM_SUBTYPE_REAL_VALUE = 0
@@ -1252,8 +1253,8 @@ class CmisApi(CmisCdbFw, XcvrApi):
         # advertises a greater duration than that. Also use the 3 second
         # minimum if the read fails, since the result is cached.
         if duration is None:
-            return 3000.0
-        return max(float(duration), 3000.0)
+            return MODULE_PWRDN_DURATION_MIN_MS
+        return max(float(duration), MODULE_PWRDN_DURATION_MIN_MS)
 
     def get_host_lane_count(self, appl=None):
         '''
