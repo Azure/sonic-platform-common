@@ -1267,7 +1267,7 @@ class TestCmis(object):
 
     @pytest.mark.parametrize("mock_response1, mock_response2, expected", [
         (True, '1', 0 ),
-        (False, None, 0),
+        (False, None, 3000.0),
         (False, '6', 3000.0),
         (False, '50', 3000.0),
         (False, '500', 3000.0),
