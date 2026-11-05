@@ -1172,4 +1172,4 @@ def test_get_state_db_uses_configured_socket_and_caches_connector():
         first = module.get_state_db()
         assert first is connect.return_value
         assert module.get_state_db() is first
-        connect.assert_called_once_with("STATE_DB", use_tcp=False)
+        connect.assert_called_once_with("STATE_DB", use_tcp=False, authenticate=True)
