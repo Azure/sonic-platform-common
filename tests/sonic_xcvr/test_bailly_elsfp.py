@@ -172,13 +172,30 @@ class TestBaillyElsfpApi:
         assert "laser_bias_alarm_low" not in thresholds
 
     @pytest.mark.parametrize("status_byte, state", [
-        (0b10, "ModuleLowPwr"),
-        (0b00, "ModuleReady"),
+        (0b10, "Low power mode"),
+        (0b11, "Low power mode"),
+        (0b00, "High power mode"),
+        (0b01, "High power mode"),
     ])
     def test_module_state(self, api, eeprom, status_byte, state):
         eeprom.put(CONTROL_PAGE, 131, "B", status_byte)
         assert api.get_module_state() == state
         assert api.get_elsfp_status()["module_state"] == state
+
+    @pytest.mark.parametrize("status", [None, {}, {"els_module_low_power_state": None}])
+    def test_unavailable_power_state_does_not_infer_readiness(self, api, status):
+        with patch.object(api, "get_rlm_status", return_value=status) as read:
+            assert api.get_module_state() is None
+            assert api.get_non_banked_elsfp_status() is None
+        assert read.call_count == 2
+
+    def test_power_state_uses_legacy_readback_without_extra_hardware_reads(self, api):
+        status = {"els_module_low_power_state": "High power mode"}
+        with patch.object(api, "get_rlm_status", return_value=status) as read:
+            with patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Extra EEPROM read")):
+                assert api.get_module_state() == "High power mode"
+        read.assert_called_once_with()
+        assert not hasattr(api, "get_lpmode")
 
     def test_unavailable_lane_queries_are_not_exposed(self, api):
         # The public framework supports these methods; legacy Bailly does not.
@@ -348,13 +365,14 @@ class TestBaillyElsfpLegacyAdapters:
         assert eeprom.writes == []
         legacy.assert_called_once_with()
 
-    def test_status_reports_only_legacy_module_values(self, api):
+    @pytest.mark.parametrize("power_mode", ["High power mode", "Low power mode"])
+    def test_status_reports_only_legacy_module_values(self, api, power_mode):
         # No per-laser register reads or fabricated lane fields belong here.
         with patch.object(api, "get_rlm_status", return_value={
-                "els_module_low_power_state": "High power mode", "els_interrupt_status": "Interrupt event cleared"}):
+                "els_module_low_power_state": power_mode, "els_interrupt_status": "Interrupt event cleared"}):
             with patch.object(api.xcvr_eeprom, "read", side_effect=AssertionError("Extra EEPROM read")):
                 assert api.get_elsfp_status() == {
-                    "module_state": "ModuleReady", "interrupt_status": "Interrupt event cleared",
+                    "module_state": power_mode, "interrupt_status": "Interrupt event cleared",
                 }
 
 

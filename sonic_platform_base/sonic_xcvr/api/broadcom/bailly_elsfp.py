@@ -18,9 +18,6 @@ from ...fields.broadcom import bailly
 
 BAILLY_MAX_LASERS = 16
 
-MODULE_STATE_LOW_POWER = "ModuleLowPwr"
-MODULE_STATE_READY = "ModuleReady"
-
 
 class BaillyElsfpApi(XcvrApi):
     RLM_THRESHOLD_FIELDS = {
@@ -363,27 +360,25 @@ class BaillyElsfpApi(XcvrApi):
             return None
         return {**module, **lasers}
 
-    def _module_state_from_status(self, status):
-        if status is None:
-            return None
-        power_mode = status.get("els_module_low_power_state")
-        codes = self.xcvr_eeprom.mem_map.codes
-        if power_mode == codes.POWER_MODE[1]:
-            return MODULE_STATE_LOW_POWER
-        if power_mode == codes.POWER_MODE[0]:
-            return MODULE_STATE_READY
-        return "Unknown"
-
     def get_module_fault_cause(self) -> str:
         raise NotImplementedError("Bailly RLM does not report an ELS module fault cause")
 
     def get_module_state(self) -> str:
-        # This adapts power-mode readback, not a complete ELS state machine.
-        return self._module_state_from_status(self.get_rlm_status())
+        """Return Bailly RLM's High power mode or Low power mode readback.
+
+        Bailly defines module state as power mode, not a complete CMIS state
+        machine. High power mode does not establish CMIS ModuleReady.
+        """
+        status = self.get_rlm_status()
+        if status is None:
+            return None
+        return status.get("els_module_low_power_state")
 
     def get_non_banked_elsfp_status(self) -> dict:
         values = self.get_rlm_status()
-        state = self._module_state_from_status(values)
+        if values is None:
+            return None
+        state = values.get("els_module_low_power_state")
         if state is None:
             return None
         return {"module_state": state, "interrupt_status": values.get("els_interrupt_status")}
