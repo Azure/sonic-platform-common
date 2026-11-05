@@ -1243,15 +1243,17 @@ class CmisApi(CmisCdbFw, XcvrApi):
     @read_only_cached_api_return
     def get_module_pwr_down_duration(self):
         '''
-        This function returns the duration of module power down
+        This function returns the duration of module power down.
+
+        Some modules advertise a MaxDurationModulePwrDn they do not actually
+        meet in practice. As a result, this function advertises at least 3
+        seconds, or more if the module advertises a greater duration than
+        that. If the read fails, the 3 second minimum is also advertised
+        since the result is cached.
         '''
         if self.is_flat_memory():
             return 0
         duration = self.xcvr_eeprom.read(consts.MODULE_PWRDN_DURATION)
-        # Some modules advertise a MaxDurationModulePwrDn they do not actually
-        # meet in practice. Wait at least 3 seconds, or more if the module
-        # advertises a greater duration than that. Also use the 3 second
-        # minimum if the read fails, since the result is cached.
         if duration is None:
             return MODULE_PWRDN_DURATION_MIN_MS
         return max(float(duration), MODULE_PWRDN_DURATION_MIN_MS)
