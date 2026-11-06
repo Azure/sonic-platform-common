@@ -11,16 +11,6 @@
 //! (`Py<Row>`, the facade's row object), then read into the Rust row
 //! (`read_<row>`, the bridge's reader).  See `generator/native.py` for which
 //! function each piece stands for.
-#![allow(
-    clippy::redundant_closure_call,
-    clippy::needless_borrow,
-    // The singleton walk is the same shape as every other: a list it pushes to.
-    clippy::vec_init_then_push,
-    // An absorbed column is `Ok(<its read>)` whatever the read is; where the
-    // read is one call, its `?` and the `Ok` cancel.
-    clippy::needless_question_mark
-)]
-
 use platform_api::{
     {% for e in model.enums %}{{ e.name }}, {% endfor %}
     {% for row in model.rows %}{{ row.name }}, {% endfor %}

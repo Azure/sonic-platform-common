@@ -1,8 +1,8 @@
-//! The generated sweep of every object default,
-//! `tests/generated/object_sweep.rs`, as a module rustfmt leaves alone: it is
-//! the generator's output, held byte for byte to what `generate.py --check`
-//! regenerates.
+// Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+//! Generated contract checks compiled from Cargo's output directory.
 
 #[rustfmt::skip]
-#[path = "generated/object_sweep.rs"]
-mod object_sweep;
+mod object_sweep {
+    include!(concat!(env!("OUT_DIR"), "/tests/generated/object_sweep.rs"));
+}

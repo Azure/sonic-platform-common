@@ -28,10 +28,11 @@ use std::str::FromStr;
 
 use platform_api::PlatformError;
 
-// The generator's output, held byte for byte to what `generate.py --check`
-// regenerates: rustfmt leaves it as written.
+// Cargo generates this module from the platform API declarations.
 #[rustfmt::skip]
-mod generated;
+mod generated {
+    include!(concat!(env!("OUT_DIR"), "/src/generated.rs"));
+}
 
 pub use generated::Platform;
 

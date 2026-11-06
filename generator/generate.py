@@ -5,9 +5,9 @@ templates.  A template that decides how a sentinel is normalised is a template
 that has to be kept in step with the two other templates that decide the same
 thing; the point of the exercise is that they cannot drift.
 
-Outputs are checked in.  `--check` re-renders and compares, which is what CI
-runs: a stub edited without regenerating fails there rather than at the next
-person to touch it.
+Python outputs are checked in and verified by `--check`. Rust outputs are
+generated during Cargo builds; this command writes preview copies under
+build/generated and checks that generation is deterministic.
 """
 
 import argparse
@@ -26,6 +26,7 @@ import native
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, os.pardir))
+RUST_OUT_DIR = os.path.join(ROOT, 'build', 'generated')
 # The base classes the stub is held to and the native defaults come from:
 # the repository's, wherever the outputs are written.
 BASE_DIR = os.path.join(ROOT, 'sonic_platform_base')
@@ -1350,7 +1351,7 @@ def _fence_indented(lines):
     return out
 
 
-def render(model):
+def render(model, outputs=None):
     # The output is Rust and Python source, not HTML: autoescaping would turn
     # every `<`, `>` and `&` in a type or a doc comment into an entity.
     # nosemgrep: python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2
@@ -1368,7 +1369,7 @@ def render(model):
     # no more Rust escapes than that is.
     env.filters['rust_str'] = native.rust_str
     out = {}
-    for tpl, path in OUTPUTS.items():
+    for tpl, path in (OUTPUTS if outputs is None else outputs).items():
         text = env.get_template(tpl).render(model=model, native=getattr(model, 'native', None))
         # Trailing whitespace once, here, rather than in three templates.  A
         # blank line inside a doc comment is the usual source, and rustfmt and
@@ -1381,7 +1382,7 @@ def render(model):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--check', action='store_true',
-                    help='fail if a checked-in output is stale')
+                    help='check committed Python outputs and deterministic Rust generation')
     args = ap.parse_args()
 
     model = build(parse())
@@ -1392,10 +1393,18 @@ def main():
             print(p, file=sys.stderr)
         return 1
     rendered = render(model)
+    if args.check and rendered != render(model):
+        print('platform API generation is not deterministic', file=sys.stderr)
+        return 1
 
     stale = []
     for path, text in sorted(rendered.items()):
         rel = os.path.relpath(path, ROOT)
+        if path.endswith('.rs'):
+            if args.check:
+                continue
+            path = os.path.join(RUST_OUT_DIR, rel)
+            rel = os.path.relpath(path, ROOT)
         if args.check:
             current = open(path).read() if os.path.exists(path) else None
             if current != text:
@@ -1411,7 +1420,7 @@ def main():
             print('stale, re-run generator/generate.py: %s' % ', '.join(stale),
                   file=sys.stderr)
             return 1
-        print('generated files up to date')
+        print('checked-in Python outputs up to date; Rust generation is deterministic')
     return 0
 
 

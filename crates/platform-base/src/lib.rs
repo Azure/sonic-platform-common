@@ -33,8 +33,7 @@ pub mod subprocess;
 pub mod testing;
 pub mod yaml;
 
-// The generator's output, held byte for byte to what `generate.py --check`
-// regenerates: rustfmt leaves it as written.
+// The module wrapper includes Cargo-generated native contract and facade code.
 #[rustfmt::skip]
 mod generated;
 

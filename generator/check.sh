@@ -36,7 +36,7 @@ echo '== the generated Python matches the stub =='
 python3 -m mypy.stubtest sonic_platform_api.facade \
     --allowlist sonic_platform_api/stubtest_allowlist.txt
 
-echo '== the generated files are what the generator produces =='
+echo '== committed Python outputs match; Rust generation is deterministic =='
 (cd generator && python3 generate.py --check)
 
 # api_coverage.py reads only the checked-in inventory and the stub, so unlike
@@ -54,9 +54,10 @@ python3 -m pytest tests/platform_api_facade_test.py tests/platform_api_schema_te
 [ -n "$python_only" ] && exit 0
 
 # Formatting, of the hand-written Rust only: the generated files are declared
-# `#[rustfmt::skip]` and held instead to what the generator writes, above.
+# `#[rustfmt::skip]` and generated in Cargo's OUT_DIR.
 echo '== the Rust side is formatted =='
 cargo fmt --manifest-path crates/Cargo.toml --all -- --check
+rustfmt --check crates/build_support.rs
 
 # The crates are one workspace (crates/Cargo.toml), linted and tested as one:
 # --workspace makes every member a crate clippy lints, rather than a

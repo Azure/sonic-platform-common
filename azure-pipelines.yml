@@ -121,8 +121,8 @@ steps:
 # The platform API stub is the single source three back ends are generated
 # from, so nothing downstream can catch it drifting -- the generator would
 # happily reproduce the drift.  These are its gates: mypy over the stub,
-# stubtest between the stub and the facade it generates, and a regeneration
-# that must come out byte-identical to what is checked in.
+# stubtest between the stub and its facade, and deterministic Rust generation.
+# Cargo generates Rust sources and contract tests in OUT_DIR on a clean build.
 - script: |
     set -ex
     bash generator/check.sh --python-only
@@ -160,6 +160,7 @@ steps:
     export PYTHONPATH=$(System.DefaultWorkingDirectory)
     export CARGO_TARGET_DIR=$(Agent.TempDirectory)/rust-target CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0
     cargo fmt --manifest-path crates/Cargo.toml --all -- --check
+    rustfmt --check crates/build_support.rs
     cargo clippy --locked --manifest-path crates/Cargo.toml --workspace --all-targets -- -D warnings
     rm -rf "$CARGO_TARGET_DIR"
     cargo llvm-cov --locked --manifest-path crates/Cargo.toml --workspace --cobertura --output-path rust-coverage.xml
