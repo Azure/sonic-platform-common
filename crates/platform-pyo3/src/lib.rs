@@ -10,10 +10,11 @@ use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyInt, PyString};
 
-// The generator's output, held byte for byte to what `generate.py --check`
-// regenerates: rustfmt leaves it as written.
+// Cargo generates this module from the platform API declarations.
 #[rustfmt::skip]
-mod generated;
+mod generated {
+    include!(concat!(env!("OUT_DIR"), "/src/generated.rs"));
+}
 
 /// The generated facade's module: where `PlatformApi` and `DeviceNotFound` live.
 const FACADE_MODULE: &str = "sonic_platform_api.facade";
